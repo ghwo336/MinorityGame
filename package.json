@@ -1,0 +1,14 @@
+{
+  "name": "minority-game",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter minority-game-backend dev",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:backend": "pnpm --filter minority-game-backend build",
+    "dev": "pnpm --filter frontend dev & pnpm --filter minority-game-backend dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm --filter frontend lint"
+  }
+}

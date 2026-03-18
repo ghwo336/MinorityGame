@@ -1,0 +1,20 @@
+# Foundry
+out/
+cache/
+broadcast/
+.env
+
+# Dependencies
+node_modules/
+
+# Frontend
+frontend/.next/
+frontend/.env.local
+
+# Backend
+backend/dist/
+backend/.env
+backend/src/generated/
+
+# OS
+.DS_Store
