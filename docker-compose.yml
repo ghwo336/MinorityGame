@@ -5,11 +5,43 @@ services:
     ports:
       - "5433:5432"
     environment:
-      POSTGRES_DB: minority_game
+      POSTGRES_DB: minority_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: minority_game_backend
+    ports:
+      - "8090:8090"
+    environment:
+      PORT: 8090
+      DATABASE_URL: postgres://postgres:postgres@db:5432/minority_db
+      CORS_ORIGIN: https://minority.pelicanlab.dev
+      RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
+      CONTRACT_ADDRESS: "0x8153442D2eF3daF0a1d7a974a27b887a83C14E57"
+      DEPLOY_BLOCK: 10467410
+      POLL_INTERVAL_MS: 12000
+      RESOLVER_PRIVATE_KEY: "0x2add77807488965bd77ad47392eb8cda459416a389ef4d9f071fb1c4892cbb02"
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://minority.pelicanlab.dev/api
+        NEXT_PUBLIC_CONTRACT_ADDRESS: "0x8153442D2eF3daF0a1d7a974a27b887a83C14E57"
+    container_name: minority_game_frontend
+    ports:
+      - "3010:3010"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

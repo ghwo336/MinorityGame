@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model SyncState {
+  id        Int    @id @default(1)
+  lastBlock BigInt @default(0) @map("last_block")
+
+  @@map("sync_state")
+}
+
+model Game {
+  gameId          Int            @id @map("game_id")
+  creator         String
+  startTime       BigInt         @map("start_time")
+  question        String
+  optionA         String         @map("option_a")
+  optionB         String         @map("option_b")
+  totalPool       String         @default("0") @map("total_pool")
+  countA          Int            @default(0) @map("count_a")
+  countB          Int            @default(0) @map("count_b")
+  status          Int            @default(0) @db.SmallInt
+  winningChoice   Int            @default(0) @map("winning_choice") @db.SmallInt
+  payoutPerPlayer String         @default("0") @map("payout_per_player")
+  isTie           Boolean        @default(false) @map("is_tie")
+  blockNumber     BigInt         @map("block_number")
+  playerChoices   PlayerChoice[]
+  claims          Claim[]
+
+  @@index([status])
+  @@index([creator])
+  @@map("games")
+}
+
+model PlayerChoice {
+  gameId      Int    @map("game_id")
+  player      String
+  choice      Int    @db.SmallInt
+  blockNumber BigInt @map("block_number")
+  game        Game   @relation(fields: [gameId], references: [gameId])
+
+  @@id([gameId, player])
+  @@index([player])
+  @@map("player_choices")
+}
+
+model Claim {
+  gameId      Int    @map("game_id")
+  player      String
+  amount      String
+  blockNumber BigInt @map("block_number")
+  game        Game   @relation(fields: [gameId], references: [gameId])
+
+  @@id([gameId, player])
+  @@map("claims")
+}
