@@ -15,18 +15,43 @@ export default function CreateGamePage() {
   const [question, setQuestion] = useState("");
   const [optionA, setOptionA] = useState("");
   const [optionB, setOptionB] = useState("");
+  const [durationDays, setDurationDays] = useState(1);
+  const [pendingGameId, setPendingGameId] = useState<number | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const isFormValid = question.trim().length > 0 && optionA.trim().length > 0 && optionB.trim().length > 0;
 
   useEffect(() => {
-    if (isSuccess && gameCount !== undefined) {
-      const newGameId = Number(gameCount) - 1;
-      router.push(`/games/${newGameId}`);
+    if (isSuccess && pendingGameId !== null) {
+      setShowSuccess(true);
     }
-  }, [isSuccess, gameCount, router]);
+  }, [isSuccess, pendingGameId]);
 
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
+      {/* Create Success Modal */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#161b22] rounded-2xl border border-gray-200 dark:border-gray-800 p-8 text-center shadow-xl max-w-sm w-full mx-4">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Market Created!</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Your game has been successfully created.</p>
+            <button
+              onClick={() => {
+                setShowSuccess(false);
+                if (pendingGameId !== null) router.push(`/games/${pendingGameId}`);
+              }}
+              className="w-full py-2.5 text-sm font-semibold text-white bg-[#0052ff] hover:bg-[#0047e0] rounded-lg transition-colors"
+            >
+              Go to Game
+            </button>
+          </div>
+        </div>
+      )}
       {/* Back */}
       <Link href="/" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors mb-6">
         &larr; Back
@@ -54,6 +79,28 @@ export default function CreateGamePage() {
               placeholder="e.g. Will ETH hit $5k this month?"
               className="w-full px-4 py-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0052ff]/30 focus:border-[#0052ff] transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+              Duration
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {[1, 2, 3, 5, 7].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDurationDays(d)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                    durationDays === d
+                      ? "border-[#0052ff] bg-blue-50 dark:bg-blue-900/20 text-[#0052ff]"
+                      : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600"
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -110,15 +157,15 @@ export default function CreateGamePage() {
         <div className="p-6 border-b border-gray-100 dark:border-gray-800 space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500 dark:text-gray-400">Creation fee</span>
-            <span className="font-medium text-gray-900 dark:text-white">0.005 ETH</span>
+            <span className="font-medium text-gray-900 dark:text-white">0.003 ETH</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500 dark:text-gray-400">Duration</span>
-            <span className="font-medium text-gray-900 dark:text-white">24 hours</span>
+            <span className="font-medium text-gray-900 dark:text-white">{durationDays} day{durationDays > 1 ? "s" : ""}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500 dark:text-gray-400">Entry fee (per player)</span>
-            <span className="font-medium text-gray-900 dark:text-white">0.001 ETH</span>
+            <span className="font-medium text-gray-900 dark:text-white">0.003 ETH</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500 dark:text-gray-400">Creator reward</span>
@@ -138,7 +185,8 @@ export default function CreateGamePage() {
                 if (!question.trim()) return alert("Please enter a question for your market.");
                 if (!optionA.trim()) return alert("Please enter a label for Option A.");
                 if (!optionB.trim()) return alert("Please enter a label for Option B.");
-                create(question.trim(), optionA.trim(), optionB.trim());
+                if (gameCount !== undefined) setPendingGameId(Number(gameCount));
+                create(question.trim(), optionA.trim(), optionB.trim(), durationDays);
               }}
               disabled={isPending || isConfirming}
               className="w-full py-3 text-sm font-semibold text-white bg-[#0052ff] hover:bg-[#0047e0] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -152,7 +200,7 @@ export default function CreateGamePage() {
                   {isPending ? "Confirm in wallet..." : "Creating..."}
                 </>
               ) : (
-                "Create market (0.005 ETH)"
+                "Create market (0.003 ETH)"
               )}
             </button>
           )}

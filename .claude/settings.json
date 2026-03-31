@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker network:*)",
+      "Bash(docker volume:*)",
+      "Bash(DATABASE_URL=\"postgres://postgres:mg_s3cur3_2024\\\\!@127.0.0.1:5433/minority_db\" npx prisma migrate deploy --schema=backend/prisma/schema.prisma)",
+      "Bash(DATABASE_URL=\"postgres://postgres:mg_s3cur3_2024!@127.0.0.1:5433/minority_db\" npx prisma migrate deploy)",
+      "Bash(DATABASE_URL=\"postgres://postgres:mg_s3cur3_2024!@127.0.0.1:5433/minority_db\" npx prisma db push)",
+      "Bash(/dev/null docker:*)"
+    ]
+  }
+}

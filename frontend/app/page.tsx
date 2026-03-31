@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import GameList from "@/components/GameList";
+import { useGamesListApi } from "@/hooks/useGameApi";
 
-type Filter = "all" | "live" | "resolved";
+type Tab = "active" | "ended";
 
 export default function HomePage() {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [tab, setTab] = useState<Tab>("active");
+  const [autoSwitched, setAutoSwitched] = useState(false);
+  const { data: activeData, isLoading } = useGamesListApi({ status: 0 });
 
-  const filters: { key: Filter; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "live", label: "Live" },
-    { key: "resolved", label: "Resolved" },
-  ];
+  useEffect(() => {
+    if (!isLoading && !autoSwitched && activeData?.total === 0) {
+      setTab("ended");
+      setAutoSwitched(true);
+    }
+  }, [isLoading, activeData, autoSwitched]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -55,23 +59,23 @@ export default function HomePage() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Markets</h2>
         <div className="flex gap-2">
-          {filters.map((f) => (
+          {(["active", "ended"] as Tab[]).map((t) => (
             <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
+              key={t}
+              onClick={() => setTab(t)}
               className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                filter === f.key
+                tab === t
                   ? "text-[#0052ff] bg-blue-50 dark:bg-blue-900/30"
                   : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
             >
-              {f.label}
+              {t === "active" ? "Active" : "Ended"}
             </button>
           ))}
         </div>
       </div>
 
-      <GameList status={filter === "all" ? undefined : filter === "live" ? 0 : 1} />
+      <GameList status={tab === "active" ? 0 : 1} />
     </div>
   );
 }

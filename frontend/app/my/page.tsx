@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import {
   usePendingWithdrawals,
@@ -88,6 +89,7 @@ function MyGames({ address }: { address: `0x${string}` }) {
                 choice={pos.choice}
                 hasClaimed={pos.hasClaimed}
                 game={pos.game}
+                address={address}
               />
             ))}
           </div>
@@ -102,40 +104,61 @@ function MyGameRow({
   choice,
   hasClaimed,
   game,
+  address,
 }: {
   gameId: number;
   choice: number;
   hasClaimed: boolean;
   game: GameData;
+  address: `0x${string}`;
 }) {
   const isResolved = game.status === 1;
 
+  // DB에 choice가 없으면 localStorage에서 복원 (백엔드 POST 실패 등 fallback)
+  const [localChoice, setLocalChoice] = useState(0);
+  useEffect(() => {
+    if (choice !== 0) return;
+    const saved = localStorage.getItem(`minority_vote_choice_${gameId}_${address.toLowerCase()}`);
+    if (saved === "1" || saved === "2") setLocalChoice(Number(saved));
+  }, [gameId, address, choice]);
+
+  const displayChoice = choice !== 0 ? choice : localChoice;
+
   let claimableAmount = 0n;
   if (!hasClaimed && isResolved) {
-    if (game.isTie || choice === game.winningChoice) {
+    if (game.isTie || displayChoice === game.winningChoice) {
       claimableAmount = game.payoutPerPlayer;
     }
   }
 
   const canClaim = claimableAmount > 0n;
-  const isWinner = isResolved && !game.isTie && choice === game.winningChoice;
-  const isLoser = isResolved && !game.isTie && choice !== game.winningChoice;
+  const isWinner = isResolved && !game.isTie && displayChoice !== 0 && displayChoice === game.winningChoice;
+  const isLoser = isResolved && !game.isTie && displayChoice !== 0 && displayChoice !== game.winningChoice;
 
   return (
     <div className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
       <div className="grid grid-cols-4 items-center">
-        <Link href={`/games/${gameId}`} className="text-sm font-medium text-[#0052ff] hover:underline">
-          Game #{gameId}
+        <Link href={`/games/${gameId}`} className="text-sm font-medium text-[#0052ff] hover:underline line-clamp-2">
+          {game.question || `Game #${gameId}`}
         </Link>
 
-        <span className={`inline-flex items-center gap-1 text-sm font-medium ${
-          choice === 1 ? "text-[#0052ff]" : "text-red-500"
-        }`}>
-          <span className={`w-2 h-2 rounded-full ${
-            choice === 1 ? "bg-[#0052ff]" : "bg-red-500"
-          }`} />
-          Choice {choice === 1 ? "A" : "B"}
-        </span>
+        {displayChoice === 0 ? (
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-gray-400 dark:text-gray-500">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            Hidden
+          </span>
+        ) : (
+          <span className={`inline-flex items-center gap-1 text-sm font-medium ${
+            displayChoice === 1 ? "text-[#0052ff]" : "text-red-500"
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${
+              displayChoice === 1 ? "bg-[#0052ff]" : "bg-red-500"
+            }`} />
+            {displayChoice === 1 ? (game.optionA || "A") : (game.optionB || "B")}
+          </span>
+        )}
 
         <div>
           {!isResolved && (

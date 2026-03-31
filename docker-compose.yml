@@ -3,13 +3,18 @@ services:
     image: postgres:16-alpine
     container_name: minority_game_db
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_DB: minority_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: md5
+    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/pg_hba.conf:/etc/postgresql/pg_hba.conf
+    env_file:
+      - .env
 
   backend:
     build:
@@ -20,15 +25,17 @@ services:
       - "8090:8090"
     environment:
       PORT: 8090
-      DATABASE_URL: postgres://postgres:postgres@db:5432/minority_db
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/minority_db
       CORS_ORIGIN: https://minority.pelicanlab.dev
       RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
-      CONTRACT_ADDRESS: "0x8153442D2eF3daF0a1d7a974a27b887a83C14E57"
-      DEPLOY_BLOCK: 10467410
+      CONTRACT_ADDRESS: "0x14ca3926ce6326ad040c5cc69180ea16a0ecd2f4"
+      DEPLOY_BLOCK: 10516436
       POLL_INTERVAL_MS: 12000
-      RESOLVER_PRIVATE_KEY: "0x2add77807488965bd77ad47392eb8cda459416a389ef4d9f071fb1c4892cbb02"
+      RESOLVER_PRIVATE_KEY: ${RESOLVER_PRIVATE_KEY}
     depends_on:
       - db
+    env_file:
+      - .env
 
   frontend:
     build:
@@ -36,7 +43,7 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: https://minority.pelicanlab.dev/api
-        NEXT_PUBLIC_CONTRACT_ADDRESS: "0x8153442D2eF3daF0a1d7a974a27b887a83C14E57"
+        NEXT_PUBLIC_CONTRACT_ADDRESS: "0x14ca3926ce6326ad040c5cc69180ea16a0ecd2f4"
     container_name: minority_game_frontend
     ports:
       - "3010:3010"

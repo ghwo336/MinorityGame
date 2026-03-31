@@ -18,12 +18,14 @@ model Game {
   gameId          Int            @id @map("game_id")
   creator         String
   startTime       BigInt         @map("start_time")
+  duration        BigInt         @default(86400) @map("duration")
   question        String
   optionA         String         @map("option_a")
   optionB         String         @map("option_b")
   totalPool       String         @default("0") @map("total_pool")
   countA          Int            @default(0) @map("count_a")
   countB          Int            @default(0) @map("count_b")
+  commitCount     Int            @default(0) @map("commit_count")
   status          Int            @default(0) @db.SmallInt
   winningChoice   Int            @default(0) @map("winning_choice") @db.SmallInt
   payoutPerPlayer String         @default("0") @map("payout_per_player")
@@ -31,10 +33,25 @@ model Game {
   blockNumber     BigInt         @map("block_number")
   playerChoices   PlayerChoice[]
   claims          Claim[]
+  voteCommits     VoteCommit[]
 
   @@index([status])
   @@index([creator])
   @@map("games")
+}
+
+model VoteCommit {
+  gameId         Int     @map("game_id")
+  player         String
+  commitmentHash String  @map("commitment_hash")
+  choice         Int?    @db.SmallInt
+  salt           String?
+  revealed       Boolean @default(false)
+  game           Game    @relation(fields: [gameId], references: [gameId])
+
+  @@id([gameId, player])
+  @@index([gameId, revealed])
+  @@map("vote_commits")
 }
 
 model PlayerChoice {

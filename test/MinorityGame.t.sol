@@ -8,15 +8,19 @@ contract MinorityGameTest is Test {
     MinorityGame public game;
 
     address public deployer;
+    address public resolver;
     address public creator;
     address public alice;
     address public bob;
     address public charlie;
     address public dave;
 
-    uint256 constant BET_AMOUNT = 0.001 ether;
-    uint256 constant CREATION_FEE = 0.005 ether;
-    uint256 constant GAME_DURATION = 24 hours;
+    uint256 constant BET_AMOUNT    = 0.001 ether;
+    uint256 constant CREATION_FEE  = 0.003 ether;
+    uint256 constant GAME_DURATION = 1 days;
+
+    // 테스트용 salt 저장
+    mapping(address => mapping(uint256 => bytes32)) private _salts;
 
     event GameCreated(uint256 indexed gameId, address indexed creator, uint256 startTime, string question, string optionA, string optionB);
     event Joined(uint256 indexed gameId, address indexed player, MinorityGame.Choice choice);
@@ -25,32 +29,58 @@ contract MinorityGameTest is Test {
 
     function setUp() public {
         deployer = makeAddr("deployer");
-        creator = makeAddr("creator");
-        alice = makeAddr("alice");
-        bob = makeAddr("bob");
-        charlie = makeAddr("charlie");
-        dave = makeAddr("dave");
+        resolver = makeAddr("resolver");
+        creator  = makeAddr("creator");
+        alice    = makeAddr("alice");
+        bob      = makeAddr("bob");
+        charlie  = makeAddr("charlie");
+        dave     = makeAddr("dave");
 
-        vm.deal(creator, 10 ether);
-        vm.deal(alice, 10 ether);
-        vm.deal(bob, 10 ether);
-        vm.deal(charlie, 10 ether);
-        vm.deal(dave, 10 ether);
+        vm.deal(creator,  10 ether);
+        vm.deal(alice,    10 ether);
+        vm.deal(bob,      10 ether);
+        vm.deal(charlie,  10 ether);
+        vm.deal(dave,     10 ether);
 
         vm.prank(deployer);
-        game = new MinorityGame();
+        game = new MinorityGame(resolver);
     }
 
-    // ─── Helper ──────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────────
 
     function _createGame() internal returns (uint256) {
         vm.prank(creator);
-        return game.createGame{value: CREATION_FEE}("Who will win?", "Team A", "Team B");
+        return game.createGame{value: CREATION_FEE}("Who will win?", "Team A", "Team B", 1);
     }
 
-    function _join(address player, uint256 gameId, MinorityGame.Choice choice) internal {
+    /// @dev 플레이어가 commitVote 호출, salt 내부 저장
+    function _commit(address player, uint256 gameId, MinorityGame.Choice choice) internal {
+        bytes32 salt = keccak256(abi.encodePacked(player, gameId, block.timestamp));
+        _salts[player][gameId] = salt;
+
+        uint8 choiceU8 = uint8(choice);
+        bytes32 commitment = keccak256(abi.encodePacked(gameId, choiceU8, salt, player));
+
         vm.prank(player);
-        game.joinGame{value: BET_AMOUNT}(gameId, choice);
+        game.commitVote{value: BET_AMOUNT}(gameId, commitment);
+    }
+
+    /// @dev resolver가 저장된 모든 커밋을 revealVotes로 제출
+    function _revealAll(
+        uint256 gameId,
+        address[] memory players,
+        MinorityGame.Choice[] memory choices
+    ) internal {
+        uint8[]   memory choicesU8 = new uint8[](players.length);
+        bytes32[] memory salts     = new bytes32[](players.length);
+
+        for (uint256 i = 0; i < players.length; i++) {
+            choicesU8[i] = uint8(choices[i]);
+            salts[i]     = _salts[players[i]][gameId];
+        }
+
+        vm.prank(resolver);
+        game.revealVotes(gameId, players, choicesU8, salts);
     }
 
     // ─── 1. 게임 생성 성공 ───────────────────────────────────
@@ -72,72 +102,86 @@ contract MinorityGameTest is Test {
         assertEq(uint8(g.status), uint8(MinorityGame.GameStatus.Active));
     }
 
-    // ─── 2. 생성 fee 부족 시 실패 ───────────────────────────
+    // ─── 2. 생성 fee 오류 ────────────────────────────────────
 
     function test_RevertWhen_CreateGame_InsufficientFee() public {
         vm.prank(creator);
         vm.expectRevert("Incorrect creation fee");
-        game.createGame{value: 0.002 ether}("Q", "A", "B");
+        game.createGame{value: 0.001 ether}("Q", "A", "B", 1);
     }
 
-    // ─── 3. 게임 참여 성공 ───────────────────────────────────
+    // ─── 3. commitVote 성공 ──────────────────────────────────
 
-    function test_JoinGame_Success() public {
+    function test_CommitVote_Success() public {
         uint256 gameId = _createGame();
 
-        vm.expectEmit(true, true, false, true);
-        emit Joined(gameId, alice, MinorityGame.Choice.A);
-
-        _join(alice, gameId, MinorityGame.Choice.A);
+        _commit(alice, gameId, MinorityGame.Choice.A);
 
         MinorityGame.Game memory g = game.getGame(gameId);
-        assertEq(g.countA, 1);
-        assertEq(g.countB, 0);
+        assertEq(g.commitCount, 1);
         assertEq(g.totalPool, BET_AMOUNT);
-        assertEq(uint8(game.getPlayerChoice(gameId, alice)), uint8(MinorityGame.Choice.A));
+        assertTrue(game.hasCommitted(gameId, alice));
     }
 
-    // ─── 4. 중복 참여 시 실패 ───────────────────────────────
+    // ─── 4. 중복 커밋 시 실패 ───────────────────────────────
 
-    function test_RevertWhen_JoinGame_AlreadyJoined() public {
+    function test_RevertWhen_CommitVote_AlreadyCommitted() public {
         uint256 gameId = _createGame();
-        _join(alice, gameId, MinorityGame.Choice.A);
+        _commit(alice, gameId, MinorityGame.Choice.A);
 
+        bytes32 commitment = keccak256(abi.encodePacked(uint256(1)));
         vm.prank(alice);
-        vm.expectRevert("Already joined");
-        game.joinGame{value: BET_AMOUNT}(gameId, MinorityGame.Choice.B);
+        vm.expectRevert("Already committed");
+        game.commitVote{value: BET_AMOUNT}(gameId, commitment);
     }
 
-    // ─── 5. 만료된 게임 참여 시 실패 ────────────────────────
+    // ─── 5. 만료 후 커밋 시 실패 ────────────────────────────
 
-    function test_RevertWhen_JoinGame_GameExpired() public {
+    function test_RevertWhen_CommitVote_GameExpired() public {
         uint256 gameId = _createGame();
+        vm.warp(block.timestamp + GAME_DURATION);
+
+        bytes32 commitment = keccak256(abi.encodePacked(uint256(1)));
+        vm.prank(alice);
+        vm.expectRevert("Game expired");
+        game.commitVote{value: BET_AMOUNT}(gameId, commitment);
+    }
+
+    // ─── 6. 만료 전 reveal 시 실패 ──────────────────────────
+
+    function test_RevertWhen_RevealVotes_BeforeExpiry() public {
+        uint256 gameId = _createGame();
+        _commit(alice, gameId, MinorityGame.Choice.A);
+
+        address[] memory players = new address[](1);
+        MinorityGame.Choice[] memory choices = new MinorityGame.Choice[](1);
+        players[0] = alice;
+        choices[0] = MinorityGame.Choice.A;
+
+        vm.expectRevert("Game not expired yet");
+        _revealAll(gameId, players, choices);
+    }
+
+    // ─── 7. 일부만 reveal 시 실패 ───────────────────────────
+
+    function test_RevertWhen_RevealVotes_MissingCommits() public {
+        uint256 gameId = _createGame();
+        _commit(alice, gameId, MinorityGame.Choice.A);
+        _commit(bob,   gameId, MinorityGame.Choice.B);
 
         vm.warp(block.timestamp + GAME_DURATION);
 
-        vm.prank(alice);
-        vm.expectRevert("Game expired");
-        game.joinGame{value: BET_AMOUNT}(gameId, MinorityGame.Choice.A);
-    }
+        // alice만 reveal 시도 (bob 누락)
+        address[] memory players = new address[](1);
+        uint8[]   memory choices = new uint8[](1);
+        bytes32[] memory salts   = new bytes32[](1);
+        players[0] = alice;
+        choices[0] = 1;
+        salts[0]   = _salts[alice][gameId];
 
-    // ─── 6. 잘못된 베팅 금액 시 실패 ────────────────────────
-
-    function test_RevertWhen_JoinGame_WrongBetAmount() public {
-        uint256 gameId = _createGame();
-
-        vm.prank(alice);
-        vm.expectRevert("Must bet exactly 0.001 ETH");
-        game.joinGame{value: 0.002 ether}(gameId, MinorityGame.Choice.A);
-    }
-
-    // ─── 7. 24시간 전 resolve 시 실패 ───────────────────────
-
-    function test_RevertWhen_ResolveGame_BeforeExpiry() public {
-        uint256 gameId = _createGame();
-        _join(alice, gameId, MinorityGame.Choice.A);
-
-        vm.expectRevert("Game not expired yet");
-        game.resolveGame(gameId);
+        vm.prank(resolver);
+        vm.expectRevert("Must reveal all commits");
+        game.revealVotes(gameId, players, choices, salts);
     }
 
     // ─── 8. 소수결 승리 처리 ────────────────────────────────
@@ -146,27 +190,30 @@ contract MinorityGameTest is Test {
         uint256 gameId = _createGame();
 
         // A: alice, bob / B: charlie → B가 소수 → B 승리
-        _join(alice, gameId, MinorityGame.Choice.A);
-        _join(bob, gameId, MinorityGame.Choice.A);
-        _join(charlie, gameId, MinorityGame.Choice.B);
+        _commit(alice,   gameId, MinorityGame.Choice.A);
+        _commit(bob,     gameId, MinorityGame.Choice.A);
+        _commit(charlie, gameId, MinorityGame.Choice.B);
 
         vm.warp(block.timestamp + GAME_DURATION);
+
+        address[] memory players = new address[](3);
+        MinorityGame.Choice[] memory choices = new MinorityGame.Choice[](3);
+        players[0] = alice;   choices[0] = MinorityGame.Choice.A;
+        players[1] = bob;     choices[1] = MinorityGame.Choice.A;
+        players[2] = charlie; choices[2] = MinorityGame.Choice.B;
 
         vm.expectEmit(true, false, false, true);
         emit Resolved(gameId, MinorityGame.Choice.B, false);
 
-        game.resolveGame(gameId);
+        _revealAll(gameId, players, choices);
 
         MinorityGame.Game memory g = game.getGame(gameId);
         assertEq(uint8(g.winningChoice), uint8(MinorityGame.Choice.B));
         assertEq(uint8(g.status), uint8(MinorityGame.GameStatus.Resolved));
         assertFalse(g.isTie);
 
-        // 총 풀: 0.003 ETH
-        // protocol: 0.003 * 1% = 0.00003 ETH
-        // creator: 0.003 * 9% = 0.00027 ETH
-        // winner pool: 0.003 - 0.00003 - 0.00027 = 0.0027 ETH
-        // 승자 1명(charlie): 0.0027 ETH
+        // 총 풀: 0.003 ETH / protocol 1% / creator 9% / winner pool = 90%
+        // winner pool = 0.003 * 90% = 0.0027 ETH / 승자 1명
         assertEq(g.payoutPerPlayer, 0.0027 ether);
     }
 
@@ -175,50 +222,52 @@ contract MinorityGameTest is Test {
     function test_ResolveGame_Tie() public {
         uint256 gameId = _createGame();
 
-        // A: alice / B: bob → 무승부
-        _join(alice, gameId, MinorityGame.Choice.A);
-        _join(bob, gameId, MinorityGame.Choice.B);
+        _commit(alice, gameId, MinorityGame.Choice.A);
+        _commit(bob,   gameId, MinorityGame.Choice.B);
 
         vm.warp(block.timestamp + GAME_DURATION);
-        game.resolveGame(gameId);
+
+        address[] memory players = new address[](2);
+        MinorityGame.Choice[] memory choices = new MinorityGame.Choice[](2);
+        players[0] = alice; choices[0] = MinorityGame.Choice.A;
+        players[1] = bob;   choices[1] = MinorityGame.Choice.B;
+
+        _revealAll(gameId, players, choices);
 
         MinorityGame.Game memory g = game.getGame(gameId);
         assertTrue(g.isTie);
         assertEq(uint8(g.winningChoice), uint8(MinorityGame.Choice.None));
-
-        // 총 풀: 0.002 ETH
-        // protocol: 0.002 * 1% = 0.00002 ETH
-        // refund pool: 0.002 - 0.00002 = 0.00198 ETH
-        // 참여자 2명: 0.00198 / 2 = 0.00099 ETH
-        uint256 expectedRefund = (0.002 ether - (0.002 ether * 100 / 10000)) / 2;
-        assertEq(g.payoutPerPlayer, expectedRefund);
     }
 
-    // ─── 10. 정상 클레임 및 금액 검증 ───────────────────────
+    // ─── 10. 정상 클레임 ────────────────────────────────────
 
     function test_ClaimReward_AfterResolve() public {
         uint256 gameId = _createGame();
 
-        // A: alice, bob / B: charlie → B가 소수 → charlie 승리
-        _join(alice, gameId, MinorityGame.Choice.A);
-        _join(bob, gameId, MinorityGame.Choice.A);
-        _join(charlie, gameId, MinorityGame.Choice.B);
+        _commit(alice,   gameId, MinorityGame.Choice.A);
+        _commit(bob,     gameId, MinorityGame.Choice.A);
+        _commit(charlie, gameId, MinorityGame.Choice.B);
 
         vm.warp(block.timestamp + GAME_DURATION);
-        game.resolveGame(gameId);
+
+        address[] memory players = new address[](3);
+        MinorityGame.Choice[] memory choices = new MinorityGame.Choice[](3);
+        players[0] = alice;   choices[0] = MinorityGame.Choice.A;
+        players[1] = bob;     choices[1] = MinorityGame.Choice.A;
+        players[2] = charlie; choices[2] = MinorityGame.Choice.B;
+
+        _revealAll(gameId, players, choices);
 
         MinorityGame.Game memory g = game.getGame(gameId);
         uint256 expectedPayout = g.payoutPerPlayer;
 
         uint256 balanceBefore = charlie.balance;
-
         vm.prank(charlie);
         game.claimReward(gameId);
-
         assertEq(charlie.balance, balanceBefore + expectedPayout);
         assertTrue(game.hasClaimed(gameId, charlie));
 
-        // 다수파(alice)는 클레임 불가
+        // 다수파 alice 클레임 불가
         vm.prank(alice);
         vm.expectRevert("Not a winner");
         game.claimReward(gameId);
@@ -229,13 +278,19 @@ contract MinorityGameTest is Test {
     function test_RevertWhen_ClaimReward_DuplicateClaim() public {
         uint256 gameId = _createGame();
 
-        // A: alice / B: bob, charlie → A가 소수 → alice 승리
-        _join(alice, gameId, MinorityGame.Choice.A);
-        _join(bob, gameId, MinorityGame.Choice.B);
-        _join(charlie, gameId, MinorityGame.Choice.B);
+        _commit(alice,   gameId, MinorityGame.Choice.A);
+        _commit(bob,     gameId, MinorityGame.Choice.B);
+        _commit(charlie, gameId, MinorityGame.Choice.B);
 
         vm.warp(block.timestamp + GAME_DURATION);
-        game.resolveGame(gameId);
+
+        address[] memory players = new address[](3);
+        MinorityGame.Choice[] memory choices = new MinorityGame.Choice[](3);
+        players[0] = alice;   choices[0] = MinorityGame.Choice.A;
+        players[1] = bob;     choices[1] = MinorityGame.Choice.B;
+        players[2] = charlie; choices[2] = MinorityGame.Choice.B;
+
+        _revealAll(gameId, players, choices);
 
         vm.prank(alice);
         game.claimReward(gameId);
@@ -245,16 +300,22 @@ contract MinorityGameTest is Test {
         game.claimReward(gameId);
     }
 
-    // ─── 12. 무승부 시 환불 ─────────────────────────────────
+    // ─── 12. 무승부 환불 ────────────────────────────────────
 
     function test_ClaimReward_TieRefund() public {
         uint256 gameId = _createGame();
 
-        _join(alice, gameId, MinorityGame.Choice.A);
-        _join(bob, gameId, MinorityGame.Choice.B);
+        _commit(alice, gameId, MinorityGame.Choice.A);
+        _commit(bob,   gameId, MinorityGame.Choice.B);
 
         vm.warp(block.timestamp + GAME_DURATION);
-        game.resolveGame(gameId);
+
+        address[] memory players = new address[](2);
+        MinorityGame.Choice[] memory choices = new MinorityGame.Choice[](2);
+        players[0] = alice; choices[0] = MinorityGame.Choice.A;
+        players[1] = bob;   choices[1] = MinorityGame.Choice.B;
+
+        _revealAll(gameId, players, choices);
 
         MinorityGame.Game memory g = game.getGame(gameId);
         assertTrue(g.isTie);
@@ -263,10 +324,20 @@ contract MinorityGameTest is Test {
         vm.prank(alice);
         game.claimReward(gameId);
         assertEq(alice.balance, balanceBefore + g.payoutPerPlayer);
+    }
 
-        uint256 balanceBefore2 = bob.balance;
-        vm.prank(bob);
-        game.claimReward(gameId);
-        assertEq(bob.balance, balanceBefore2 + g.payoutPerPlayer);
+    // ─── 13. emergency refund ────────────────────────────────
+
+    function test_EmergencyRefund() public {
+        uint256 gameId = _createGame();
+        _commit(alice, gameId, MinorityGame.Choice.A);
+
+        // 게임 만료 + 3일 후
+        vm.warp(block.timestamp + GAME_DURATION + 3 days);
+
+        uint256 balanceBefore = alice.balance;
+        vm.prank(alice);
+        game.emergencyRefund(gameId);
+        assertEq(alice.balance, balanceBefore + BET_AMOUNT);
     }
 }

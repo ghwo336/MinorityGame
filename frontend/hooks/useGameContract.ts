@@ -70,53 +70,37 @@ export function useCreateGame() {
   const { isLoading: isConfirming, isSuccess } =
     useWaitForTransactionReceipt({ hash });
 
-  const create = (question: string, optionA: string, optionB: string) => {
+  const create = (question: string, optionA: string, optionB: string, durationDays: number) => {
     writeContract({
       address: MINORITY_GAME_ADDRESS,
       abi: MINORITY_GAME_ABI,
       functionName: "createGame",
-      args: [question, optionA, optionB],
-      value: parseEther("0.005"),
+      args: [question, optionA, optionB, BigInt(durationDays)],
+      value: parseEther("0.003"),
     });
   };
 
   return { create, isPending, isConfirming, isSuccess, hash, error };
 }
 
-export function useJoinGame() {
+export function useCommitVote() {
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } =
     useWaitForTransactionReceipt({ hash });
 
-  const join = (gameId: number, choice: 1 | 2) => {
+  const commit = (gameId: number, commitment: `0x${string}`) => {
     writeContract({
       address: MINORITY_GAME_ADDRESS,
       abi: MINORITY_GAME_ABI,
-      functionName: "joinGame",
-      args: [BigInt(gameId), choice],
+      functionName: "commitVote",
+      args: [BigInt(gameId), commitment],
       value: parseEther("0.001"),
     });
   };
 
-  return { join, isPending, isConfirming, isSuccess, hash, error };
+  return { commit, isPending, isConfirming, isSuccess, hash, error };
 }
 
-export function useResolveGame() {
-  const { writeContract, data: hash, isPending, error } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } =
-    useWaitForTransactionReceipt({ hash });
-
-  const resolve = (gameId: number) => {
-    writeContract({
-      address: MINORITY_GAME_ADDRESS,
-      abi: MINORITY_GAME_ABI,
-      functionName: "resolveGame",
-      args: [BigInt(gameId)],
-    });
-  };
-
-  return { resolve, isPending, isConfirming, isSuccess, hash, error };
-}
 
 export function useClaimReward() {
   const { writeContract, data: hash, isPending, error } = useWriteContract();

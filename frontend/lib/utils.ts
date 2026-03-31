@@ -8,13 +8,13 @@ export function formatETH(wei: bigint): string {
   return parseFloat(formatEther(wei)).toFixed(4);
 }
 
-export function getTimeRemaining(startTime: bigint): {
+export function getTimeRemaining(startTime: bigint, duration: bigint): {
   hours: number;
   minutes: number;
   seconds: number;
   expired: boolean;
 } {
-  const endTime = Number(startTime) + 24 * 60 * 60;
+  const endTime = Number(startTime) + Number(duration);
   const now = Math.floor(Date.now() / 1000);
   const diff = endTime - now;
 

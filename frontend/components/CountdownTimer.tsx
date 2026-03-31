@@ -5,15 +5,16 @@ import { getTimeRemaining } from "@/lib/utils";
 
 interface CountdownTimerProps {
   startTime: bigint;
+  duration: bigint;
   compact?: boolean;
 }
 
-export default function CountdownTimer({ startTime, compact }: CountdownTimerProps) {
-  const [time, setTime] = useState(getTimeRemaining(startTime));
+export default function CountdownTimer({ startTime, duration, compact }: CountdownTimerProps) {
+  const [time, setTime] = useState(getTimeRemaining(startTime, duration));
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setTime(getTimeRemaining(startTime));
+      setTime(getTimeRemaining(startTime, duration));
     }, 1000);
     return () => clearInterval(interval);
   }, [startTime]);

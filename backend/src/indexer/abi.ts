@@ -10,9 +10,11 @@ export const MINORITY_GAME_ABI = [
         components: [
           { name: "creator", type: "address" },
           { name: "startTime", type: "uint256" },
+          { name: "duration", type: "uint256" },
           { name: "totalPool", type: "uint256" },
           { name: "countA", type: "uint256" },
           { name: "countB", type: "uint256" },
+          { name: "commitCount", type: "uint256" },
           { name: "winningChoice", type: "uint8" },
           { name: "status", type: "uint8" },
           { name: "payoutPerPlayer", type: "uint256" },
@@ -27,8 +29,20 @@ export const MINORITY_GAME_ABI = [
   },
   {
     type: "function",
-    name: "resolveGame",
+    name: "endEmptyGame",
     inputs: [{ name: "gameId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "revealVotes",
+    inputs: [
+      { name: "gameId", type: "uint256" },
+      { name: "players", type: "address[]" },
+      { name: "choices", type: "uint8[]" },
+      { name: "salts", type: "bytes32[]" },
+    ],
     outputs: [],
     stateMutability: "nonpayable",
   },
@@ -42,6 +56,15 @@ export const MINORITY_GAME_ABI = [
       { name: "question", type: "string", indexed: false },
       { name: "optionA", type: "string", indexed: false },
       { name: "optionB", type: "string", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "VoteCommitted",
+    inputs: [
+      { name: "gameId", type: "uint256", indexed: true },
+      { name: "player", type: "address", indexed: true },
+      { name: "commitment", type: "bytes32", indexed: false },
     ],
   },
   {

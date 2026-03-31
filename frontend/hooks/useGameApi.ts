@@ -16,6 +16,7 @@ export function useGamesListApi(opts?: { status?: number }) {
       total: data.total,
     }),
     staleTime: 10_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -25,6 +26,7 @@ export function useGameCountApi() {
     queryFn: () => api.getGameCount(),
     select: (data) => data.count,
     staleTime: 10_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -33,7 +35,8 @@ export function useGameDataApi(gameId: number) {
     queryKey: ["game", gameId],
     queryFn: () => api.getGame(gameId),
     select: toGameData,
-    staleTime: 10_000,
+    staleTime: 5_000,
+    refetchInterval: 12_000,
   });
 }
 
@@ -42,7 +45,8 @@ export function usePlayerStatusApi(gameId: number, address?: string) {
     queryKey: ["playerStatus", gameId, address],
     queryFn: () => api.getPlayerStatus(gameId, address!),
     enabled: !!address,
-    staleTime: 10_000,
+    staleTime: 5_000,
+    refetchInterval: 12_000,
   });
 }
 
@@ -58,24 +62,23 @@ export function usePlayerGamesApi(address?: string) {
       })),
       total: data.total,
     }),
-    staleTime: 10_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchInterval: 15_000,
   });
 }
 
 // ─── Invalidation after write tx ────────────────────────
 
-export function useRefetchAfterTx(txHash: `0x${string}` | undefined) {
+export function useRefetchAfterTx(isSuccess?: boolean) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!txHash) return;
-    const timer = setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ["games"] });
-      queryClient.invalidateQueries({ queryKey: ["game"] });
-      queryClient.invalidateQueries({ queryKey: ["gameCount"] });
-      queryClient.invalidateQueries({ queryKey: ["playerStatus"] });
-      queryClient.invalidateQueries({ queryKey: ["playerGames"] });
-    }, 15_000);
-    return () => clearTimeout(timer);
-  }, [txHash, queryClient]);
+    if (!isSuccess) return;
+    queryClient.invalidateQueries({ queryKey: ["games"] });
+    queryClient.invalidateQueries({ queryKey: ["game"] });
+    queryClient.invalidateQueries({ queryKey: ["gameCount"] });
+    queryClient.invalidateQueries({ queryKey: ["playerStatus"] });
+    queryClient.invalidateQueries({ queryKey: ["playerGames"] });
+  }, [isSuccess, queryClient]);
 }

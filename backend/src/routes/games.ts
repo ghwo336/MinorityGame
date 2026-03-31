@@ -52,6 +52,46 @@ export function gamesRouter(): Router {
     }
   });
 
+  // POST /api/games/:id/commit  - 투표 데이터 저장 (choice + salt)
+  router.post("/:id/commit", async (req, res) => {
+    try {
+      const gameId = parseInt(req.params.id);
+      if (isNaN(gameId)) {
+        res.status(400).json({ error: "Invalid game ID" });
+        return;
+      }
+
+      const { player, choice, salt, signature } = req.body;
+
+      if (!player || !choice || !salt || !signature) {
+        res.status(400).json({ error: "Missing required fields" });
+        return;
+      }
+      if (choice !== 1 && choice !== 2) {
+        res.status(400).json({ error: "Invalid choice" });
+        return;
+      }
+
+      const result = await queries.storeVoteData({
+        gameId,
+        player: player.toLowerCase(),
+        choice,
+        salt,
+        signature,
+      });
+
+      if (!result.ok) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(`POST /api/games/${req.params.id}/commit error:`, err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // GET /api/games  (?status=0|1, ?limit, ?offset)
   router.get("/", async (req, res) => {
     try {

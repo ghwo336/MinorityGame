@@ -6,12 +6,14 @@ export interface GameApiResponse {
   gameId: number;
   creator: string;
   startTime: string;
+  duration: string;
   question: string;
   optionA: string;
   optionB: string;
   totalPool: string;
   countA: number;
   countB: number;
+  commitCount: number;
   status: number;
   winningChoice: number;
   payoutPerPlayer: string;
@@ -20,6 +22,7 @@ export interface GameApiResponse {
 
 export interface PlayerStatusResponse {
   choice: number;
+  hasCommitted: boolean;
   hasClaimed: boolean;
   claimableAmount: string;
 }
@@ -37,9 +40,11 @@ export interface GameData {
   gameId: number;
   creator: string;
   startTime: bigint;
+  duration: bigint;
   totalPool: bigint;
   countA: bigint;
   countB: bigint;
+  commitCount: number;
   winningChoice: number;
   status: number;
   payoutPerPlayer: bigint;
@@ -54,9 +59,11 @@ export function toGameData(g: GameApiResponse): GameData {
     gameId: g.gameId,
     creator: g.creator,
     startTime: BigInt(g.startTime),
+    duration: BigInt(g.duration ?? 86400),
     totalPool: BigInt(g.totalPool),
     countA: BigInt(g.countA),
     countB: BigInt(g.countB),
+    commitCount: g.commitCount ?? 0,
     winningChoice: g.winningChoice,
     status: g.status,
     payoutPerPlayer: BigInt(g.payoutPerPlayer),
@@ -96,6 +103,24 @@ export async function getGame(gameId: number) {
 
 export async function getPlayerStatus(gameId: number, address: string) {
   return fetchJson<PlayerStatusResponse>(`/games/${gameId}/players/${address}`);
+}
+
+export async function submitVoteData(
+  gameId: number,
+  player: string,
+  choice: number,
+  salt: string,
+  signature: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/games/${gameId}/commit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ player, choice, salt, signature }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `API error ${res.status}`);
+  }
 }
 
 export async function getPlayerGames(address: string, opts?: { limit?: number; offset?: number }) {

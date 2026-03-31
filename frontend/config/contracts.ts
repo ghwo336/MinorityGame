@@ -3,7 +3,7 @@ export const MINORITY_GAME_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?
 export const MINORITY_GAME_ABI = [
   {
     type: "constructor",
-    inputs: [],
+    inputs: [{ name: "_resolver", type: "address" }],
     stateMutability: "nonpayable",
   },
   {
@@ -22,7 +22,14 @@ export const MINORITY_GAME_ABI = [
   },
   {
     type: "function",
-    name: "GAME_DURATION",
+    name: "MIN_DURATION",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "MAX_DURATION",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
@@ -41,6 +48,7 @@ export const MINORITY_GAME_ABI = [
       { name: "question", type: "string" },
       { name: "optionA", type: "string" },
       { name: "optionB", type: "string" },
+      { name: "durationDays", type: "uint256" },
     ],
     outputs: [{ name: "gameId", type: "uint256" }],
     stateMutability: "payable",
@@ -73,9 +81,11 @@ export const MINORITY_GAME_ABI = [
         components: [
           { name: "creator", type: "address" },
           { name: "startTime", type: "uint256" },
+          { name: "duration", type: "uint256" },
           { name: "totalPool", type: "uint256" },
           { name: "countA", type: "uint256" },
           { name: "countB", type: "uint256" },
+          { name: "commitCount", type: "uint256" },
           { name: "winningChoice", type: "uint8" },
           { name: "status", type: "uint8" },
           { name: "payoutPerPlayer", type: "uint256" },
@@ -107,13 +117,23 @@ export const MINORITY_GAME_ABI = [
   },
   {
     type: "function",
-    name: "joinGame",
+    name: "commitVote",
     inputs: [
       { name: "gameId", type: "uint256" },
-      { name: "choice", type: "uint8" },
+      { name: "commitment", type: "bytes32" },
     ],
     outputs: [],
     stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "hasCommitted",
+    inputs: [
+      { name: "gameId", type: "uint256" },
+      { name: "player", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -123,8 +143,17 @@ export const MINORITY_GAME_ABI = [
     stateMutability: "view",
   },
   {
+    type: "event",
+    name: "VoteCommitted",
+    inputs: [
+      { name: "gameId", type: "uint256", indexed: true },
+      { name: "player", type: "address", indexed: true },
+      { name: "commitment", type: "bytes32", indexed: false },
+    ],
+  },
+  {
     type: "function",
-    name: "resolveGame",
+    name: "endEmptyGame",
     inputs: [{ name: "gameId", type: "uint256" }],
     outputs: [],
     stateMutability: "nonpayable",

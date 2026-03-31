@@ -10,8 +10,8 @@ interface ClaimButtonProps {
 }
 
 export default function ClaimButton({ gameId, amount }: ClaimButtonProps) {
-  const { claim, isPending, isConfirming, isSuccess, hash } = useClaimReward();
-  useRefetchAfterTx(hash);
+  const { claim, isPending, isConfirming, isSuccess } = useClaimReward();
+  useRefetchAfterTx(isSuccess);
 
   if (isSuccess) {
     return (

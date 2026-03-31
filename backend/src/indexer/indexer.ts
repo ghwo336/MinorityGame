@@ -13,7 +13,6 @@ export function startIndexer(cfg: Config) {
     transport,
   });
 
-  // Auto-resolver wallet (optional)
   const walletClient = cfg.resolverPrivateKey
     ? createWalletClient({
         chain: sepolia,
@@ -24,7 +23,7 @@ export function startIndexer(cfg: Config) {
 
   let isPolling = false;
 
-  async function autoResolveExpired() {
+  async function autoRevealExpired() {
     if (!walletClient) return;
 
     const expiredIds = await queries.getExpiredActiveGames();
@@ -32,20 +31,50 @@ export function startIndexer(cfg: Config) {
 
     for (const gameId of expiredIds) {
       try {
+        const commits = await queries.getVoteCommitsForReveal(gameId);
+
+        // 참여자 없는 만료 게임 → 온체인 종료
+        if (commits.length === 0) {
+          const hash = await walletClient.writeContract({
+            address: cfg.contractAddress,
+            abi: MINORITY_GAME_ABI,
+            functionName: "endEmptyGame",
+            args: [BigInt(gameId)],
+          });
+          console.log(`Ended empty game ${gameId} (tx: ${hash})`);
+          continue;
+        }
+
+        const game = await queries.getGame(gameId);
+        if (!game) continue;
+
+        // 백엔드에 데이터가 없는 커밋이 있으면 아직 reveal 불가
+        if (commits.length < game.commitCount) {
+          console.log(
+            `Game ${gameId}: ${game.commitCount - commits.length} commits missing vote data, skipping reveal`
+          );
+          continue;
+        }
+
+        const players = commits.map((c) => c.player as `0x${string}`);
+        const choices = commits.map((c) => c.choice as 1 | 2);
+        const salts = commits.map((c) => c.salt as `0x${string}`);
+
         const hash = await walletClient.writeContract({
           address: cfg.contractAddress,
           abi: MINORITY_GAME_ABI,
-          functionName: "resolveGame",
-          args: [BigInt(gameId)],
+          functionName: "revealVotes",
+          args: [BigInt(gameId), players, choices, salts],
         });
-        console.log(`Auto-resolved game ${gameId} (tx: ${hash})`);
+
+        console.log(`Auto-revealed game ${gameId} (${commits.length} votes, tx: ${hash})`);
+        await queries.markCommitsRevealed(gameId);
       } catch (err: any) {
-        // Skip games with no participants or already resolved
         const msg = err?.message || "";
-        if (msg.includes("No participants") || msg.includes("not active")) {
-          console.log(`Skip auto-resolve game ${gameId}: ${msg.slice(0, 80)}`);
+        if (msg.includes("not active") || msg.includes("not expired")) {
+          // skip silently
         } else {
-          console.error(`Failed to auto-resolve game ${gameId}:`, msg.slice(0, 120));
+          console.error(`Failed to auto-reveal game ${gameId}:`, msg.slice(0, 120));
         }
       }
     }
@@ -79,10 +108,7 @@ export function startIndexer(cfg: Config) {
       console.log(`Polling blocks ${fromBlock}..${toBlock}`);
 
       if (logs.length > 0) {
-        const events = parseEventLogs({
-          abi: MINORITY_GAME_ABI,
-          logs,
-        });
+        const events = parseEventLogs({ abi: MINORITY_GAME_ABI, logs });
 
         for (const event of events) {
           const blockNumber = Number(event.blockNumber);
@@ -90,10 +116,17 @@ export function startIndexer(cfg: Config) {
           switch (event.eventName) {
             case "GameCreated": {
               const args = event.args;
+              const gameData = await client.readContract({
+                address: cfg.contractAddress,
+                abi: MINORITY_GAME_ABI,
+                functionName: "getGame",
+                args: [args.gameId],
+              });
               await queries.insertGame({
                 gameId: Number(args.gameId),
                 creator: args.creator.toLowerCase(),
                 startTime: args.startTime.toString(),
+                duration: (gameData as any).duration.toString(),
                 question: args.question,
                 optionA: args.optionA,
                 optionB: args.optionB,
@@ -101,7 +134,23 @@ export function startIndexer(cfg: Config) {
               });
               break;
             }
+
+            case "VoteCommitted": {
+              const args = event.args;
+              await queries.insertVoteCommit({
+                gameId: Number(args.gameId),
+                player: args.player.toLowerCase(),
+                commitmentHash: args.commitment,
+              });
+              await queries.updateGameTotalPool({
+                gameId: Number(args.gameId),
+                betAmount: "1000000000000000", // 0.001 ETH
+              });
+              break;
+            }
+
             case "Joined": {
+              // reveal 후 emitted - playerChoices 업데이트
               const args = event.args;
               await queries.insertPlayerChoice({
                 gameId: Number(args.gameId),
@@ -109,13 +158,9 @@ export function startIndexer(cfg: Config) {
                 choice: Number(args.choice),
                 blockNumber,
               });
-              await queries.incrementGameVote({
-                gameId: Number(args.gameId),
-                choice: Number(args.choice),
-                betAmount: "1000000000000000", // 0.001 ETH
-              });
               break;
             }
+
             case "Resolved": {
               const args = event.args;
               const gameId = Number(args.gameId);
@@ -130,7 +175,7 @@ export function startIndexer(cfg: Config) {
                   abi: MINORITY_GAME_ABI,
                   functionName: "getGame",
                   args: [BigInt(gameId)],
-                });
+                }) as any;
                 await queries.updateGameFull({
                   gameId,
                   totalPool: game.totalPool.toString(),
@@ -146,6 +191,7 @@ export function startIndexer(cfg: Config) {
               }
               break;
             }
+
             case "Claimed": {
               const args = event.args;
               await queries.insertClaim({
@@ -164,9 +210,8 @@ export function startIndexer(cfg: Config) {
 
       await queries.updateLastBlock(Number(toBlock));
 
-      // Auto-resolve expired games (only when caught up)
       if (toBlock >= currentBlock) {
-        await autoResolveExpired();
+        await autoRevealExpired();
       }
     } catch (err) {
       console.error("Indexer poll error:", err);
