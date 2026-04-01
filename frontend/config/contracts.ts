@@ -1,4 +1,4 @@
-export const MINORITY_GAME_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x0000000000000000000000000000000000000000") as `0x${string}`;
+export const MINORITY_GAME_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0xcc85532687565f7bd7b33bc500eea2efa0d21bcf") as `0x${string}`;
 
 export const MINORITY_GAME_ABI = [
   {
@@ -48,7 +48,7 @@ export const MINORITY_GAME_ABI = [
       { name: "question", type: "string" },
       { name: "optionA", type: "string" },
       { name: "optionB", type: "string" },
-      { name: "durationDays", type: "uint256" },
+      { name: "durationSeconds", type: "uint256" },
     ],
     outputs: [{ name: "gameId", type: "uint256" }],
     stateMutability: "payable",
@@ -154,6 +154,13 @@ export const MINORITY_GAME_ABI = [
   {
     type: "function",
     name: "endEmptyGame",
+    inputs: [{ name: "gameId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "emergencyRefund",
     inputs: [{ name: "gameId", type: "uint256" }],
     outputs: [],
     stateMutability: "nonpayable",

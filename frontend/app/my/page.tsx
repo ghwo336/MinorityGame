@@ -5,6 +5,7 @@ import { useAccount } from "wagmi";
 import {
   usePendingWithdrawals,
   useWithdrawPendingFees,
+  useEmergencyRefund,
 } from "@/hooks/useGameContract";
 import { usePlayerGamesApi } from "@/hooks/useGameApi";
 import { formatETH } from "@/lib/utils";
@@ -99,6 +100,24 @@ function MyGames({ address }: { address: `0x${string}` }) {
   );
 }
 
+const EMERGENCY_REFUND_DELAY = 3 * 24 * 60 * 60; // 3 days in seconds
+
+function EmergencyRefundButton({ gameId }: { gameId: number }) {
+  const { emergencyRefund, isPending, isConfirming, isSuccess, error } = useEmergencyRefund();
+
+  if (isSuccess) return <span className="text-xs text-green-600 dark:text-green-400">Refunded!</span>;
+
+  return (
+    <button
+      onClick={() => emergencyRefund(gameId)}
+      disabled={isPending || isConfirming}
+      className="px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors disabled:opacity-50"
+    >
+      {isPending ? "Confirm..." : isConfirming ? "Processing..." : "Emergency Refund"}
+    </button>
+  );
+}
+
 function MyGameRow({
   gameId,
   choice,
@@ -135,6 +154,13 @@ function MyGameRow({
   const isWinner = isResolved && !game.isTie && displayChoice !== 0 && displayChoice === game.winningChoice;
   const isLoser = isResolved && !game.isTie && displayChoice !== 0 && displayChoice !== game.winningChoice;
 
+  const nowSec = Math.floor(Date.now() / 1000);
+  const gameEnd = Number(game.startTime) + Number(game.duration);
+  const canEmergencyRefund =
+    !isResolved &&
+    !hasClaimed &&
+    nowSec >= gameEnd + EMERGENCY_REFUND_DELAY;
+
   return (
     <div className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
       <div className="grid grid-cols-4 items-center">
@@ -161,10 +187,15 @@ function MyGameRow({
         )}
 
         <div>
-          {!isResolved && (
+          {!isResolved && nowSec < gameEnd && (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
               Live
+            </span>
+          )}
+          {!isResolved && nowSec >= gameEnd && (
+            <span className="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
+              Pending
             </span>
           )}
           {isResolved && game.isTie && (
@@ -183,6 +214,8 @@ function MyGameRow({
             <div className="w-32 ml-auto">
               <ClaimButton gameId={gameId} amount={claimableAmount} />
             </div>
+          ) : canEmergencyRefund ? (
+            <EmergencyRefundButton gameId={gameId} />
           ) : (
             <span className="text-xs text-gray-400 dark:text-gray-500">
               {formatETH(game.totalPool)} ETH pool

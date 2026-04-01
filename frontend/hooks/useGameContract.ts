@@ -70,13 +70,14 @@ export function useCreateGame() {
   const { isLoading: isConfirming, isSuccess } =
     useWaitForTransactionReceipt({ hash });
 
-  const create = (question: string, optionA: string, optionB: string, durationDays: number) => {
+  const create = (question: string, optionA: string, optionB: string, durationSeconds: number) => {
     writeContract({
       address: MINORITY_GAME_ADDRESS,
       abi: MINORITY_GAME_ABI,
       functionName: "createGame",
-      args: [question, optionA, optionB, BigInt(durationDays)],
+      args: [question, optionA, optionB, BigInt(durationSeconds)],
       value: parseEther("0.003"),
+      gas: 400000n,
     });
   };
 
@@ -133,4 +134,21 @@ export function useWithdrawPendingFees() {
   };
 
   return { withdraw, isPending, isConfirming, isSuccess, hash, error };
+}
+
+export function useEmergencyRefund() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } =
+    useWaitForTransactionReceipt({ hash });
+
+  const emergencyRefund = (gameId: number) => {
+    writeContract({
+      address: MINORITY_GAME_ADDRESS,
+      abi: MINORITY_GAME_ABI,
+      functionName: "emergencyRefund",
+      args: [BigInt(gameId)],
+    });
+  };
+
+  return { emergencyRefund, isPending, isConfirming, isSuccess, error };
 }

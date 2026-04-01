@@ -100,20 +100,20 @@ contract MinorityGame {
         string calldata question,
         string calldata optionA,
         string calldata optionB,
-        uint256 durationDays
+        uint256 durationSeconds
     ) external payable returns (uint256 gameId) {
         require(msg.value == CREATION_FEE, "Incorrect creation fee");
         require(bytes(question).length > 0, "Question required");
         require(bytes(optionA).length > 0, "Option A required");
         require(bytes(optionB).length > 0, "Option B required");
-        require(durationDays >= 1 && durationDays <= 7, "Duration must be 1-7 days");
+        require(durationSeconds >= 60 && durationSeconds <= 7 days, "Duration must be 60s-7days");
 
         gameId = gameCount++;
 
         Game storage g = games[gameId];
         g.creator = msg.sender;
         g.startTime = block.timestamp;
-        g.duration = durationDays * 1 days;
+        g.duration = durationSeconds;
         g.question = question;
         g.optionA = optionA;
         g.optionB = optionB;

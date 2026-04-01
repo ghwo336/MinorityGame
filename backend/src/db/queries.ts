@@ -133,18 +133,7 @@ export async function storeVoteData(data: {
   salt: string;
   signature: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  const existing = await prisma.voteCommit.findUnique({
-    where: { gameId_player: { gameId: data.gameId, player: data.player } },
-  });
-
-  if (!existing) {
-    return { ok: false, error: "No commitment found for this player" };
-  }
-  if (existing.choice !== null) {
-    return { ok: true }; // 이미 저장됨
-  }
-
-  // choice+salt가 on-chain commitment과 일치하는지 직접 검증 (입력값 신뢰 안 함)
+  // choice+salt로 commitment hash 재계산
   const computed = keccak256(
     encodePacked(
       ["uint256", "uint8", "bytes32", "address"],
@@ -156,9 +145,6 @@ export async function storeVoteData(data: {
       ]
     )
   );
-  if (computed !== existing.commitmentHash) {
-    return { ok: false, error: "Vote data does not match commitment" };
-  }
 
   // EIP-191 서명으로 실제 지갑 소유 증명
   let isValid = false;
@@ -175,10 +161,40 @@ export async function storeVoteData(data: {
     return { ok: false, error: "Invalid signature" };
   }
 
-  await prisma.voteCommit.update({
+  const existing = await prisma.voteCommit.findUnique({
     where: { gameId_player: { gameId: data.gameId, player: data.player } },
-    data: { choice: data.choice, salt: data.salt },
   });
+
+  if (existing) {
+    // 이미 저장됨
+    if (existing.choice !== null) return { ok: true };
+    // commitment hash 불일치 (다른 지갑이 같은 gameId+player로 조작 시도)
+    if (existing.commitmentHash !== computed) {
+      return { ok: false, error: "Vote data does not match commitment" };
+    }
+    await prisma.voteCommit.update({
+      where: { gameId_player: { gameId: data.gameId, player: data.player } },
+      data: { choice: data.choice, salt: data.salt },
+    });
+  } else {
+    // 인덱서가 아직 VoteCommitted 이벤트를 처리하지 않은 경우 (레이스 컨디션)
+    // commitment hash와 함께 미리 저장 + commitCount 증가 (insertVoteCommit이 나중에 스킵하므로)
+    await prisma.$transaction([
+      prisma.voteCommit.create({
+        data: {
+          gameId: data.gameId,
+          player: data.player,
+          commitmentHash: computed,
+          choice: data.choice,
+          salt: data.salt,
+        },
+      }),
+      prisma.game.update({
+        where: { gameId: data.gameId },
+        data: { commitCount: { increment: 1 } },
+      }),
+    ]);
+  }
 
   return { ok: true };
 }
@@ -274,26 +290,26 @@ export async function getGames(opts: {
 }): Promise<{ games: ReturnType<typeof mapGameRow>[]; total: number }> {
   const nowSec = BigInt(Math.floor(Date.now() / 1000));
 
-  const isNoParticipantExpired = (g: {
-    status: number; commitCount: number; startTime: bigint; duration: bigint;
-  }) => g.status === 0 && g.commitCount === 0 && g.startTime + g.duration <= nowSec;
+  const isExpired = (g: {
+    status: number; startTime: bigint; duration: bigint;
+  }) => g.status === 0 && g.startTime + g.duration <= nowSec;
 
   if (opts.status === 0) {
     const all = await prisma.game.findMany({
       where: { status: 0 },
       orderBy: { gameId: "desc" },
     });
-    const filtered = all.filter((g) => !isNoParticipantExpired(g));
+    const filtered = all.filter((g) => !isExpired(g));
     const paginated = filtered.slice(opts.offset, opts.offset + opts.limit);
     return { games: paginated.map(mapGameRow), total: filtered.length };
   }
 
   if (opts.status === 1) {
     const all = await prisma.game.findMany({
-      where: { OR: [{ status: 1 }, { status: 0, commitCount: 0 }] },
+      where: { OR: [{ status: 1 }, { status: 0 }] },
       orderBy: { gameId: "desc" },
     });
-    const filtered = all.filter((g) => g.status === 1 || isNoParticipantExpired(g));
+    const filtered = all.filter((g) => g.status === 1 || isExpired(g));
     const paginated = filtered.slice(opts.offset, opts.offset + opts.limit);
     return { games: paginated.map(mapGameRow), total: filtered.length };
   }

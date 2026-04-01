@@ -31,10 +31,11 @@ export function startIndexer(cfg: Config) {
 
     for (const gameId of expiredIds) {
       try {
-        const commits = await queries.getVoteCommitsForReveal(gameId);
+        const game = await queries.getGame(gameId);
+        if (!game) continue;
 
         // 참여자 없는 만료 게임 → 온체인 종료
-        if (commits.length === 0) {
+        if (game.commitCount === 0) {
           const hash = await walletClient.writeContract({
             address: cfg.contractAddress,
             abi: MINORITY_GAME_ABI,
@@ -45,8 +46,7 @@ export function startIndexer(cfg: Config) {
           continue;
         }
 
-        const game = await queries.getGame(gameId);
-        if (!game) continue;
+        const commits = await queries.getVoteCommitsForReveal(gameId);
 
         // 백엔드에 데이터가 없는 커밋이 있으면 아직 reveal 불가
         if (commits.length < game.commitCount) {

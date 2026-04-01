@@ -28,8 +28,8 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/minority_db
       CORS_ORIGIN: https://minority.pelicanlab.dev
       RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
-      CONTRACT_ADDRESS: "0x14ca3926ce6326ad040c5cc69180ea16a0ecd2f4"
-      DEPLOY_BLOCK: 10516436
+      CONTRACT_ADDRESS: "0xcc85532687565f7bd7b33bc500eea2efa0d21bcf"
+      DEPLOY_BLOCK: 10565881
       POLL_INTERVAL_MS: 12000
       RESOLVER_PRIVATE_KEY: ${RESOLVER_PRIVATE_KEY}
     depends_on:
@@ -43,7 +43,7 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: https://minority.pelicanlab.dev/api
-        NEXT_PUBLIC_CONTRACT_ADDRESS: "0x14ca3926ce6326ad040c5cc69180ea16a0ecd2f4"
+        NEXT_PUBLIC_CONTRACT_ADDRESS: "0xcc85532687565f7bd7b33bc500eea2efa0d21bcf"
     container_name: minority_game_frontend
     ports:
       - "3010:3010"

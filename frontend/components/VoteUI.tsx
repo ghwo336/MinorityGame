@@ -178,7 +178,7 @@ export default function VoteUI({
           onClick={() => handleSelect(1)}
           disabled={alreadyVoted || isVoting}
           className={`relative rounded-xl px-4 py-7 border-2 transition-all flex flex-col items-center justify-center gap-1
-            ${myChoice === 1
+            ${selected === null && myChoice === 1
               ? "border-[#0052ff] bg-blue-50 dark:bg-blue-900/20 ring-1 ring-[#0052ff]/20"
               : selected === 1
               ? "border-[#0052ff] bg-blue-50/50 dark:bg-blue-900/10"
@@ -187,7 +187,7 @@ export default function VoteUI({
               : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#161b22] hover:border-[#0052ff] hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer"
             }`}
         >
-          {(myChoice === 1 || selected === 1) && (
+          {(selected === null && myChoice === 1 || selected === 1) && (
             <div className="absolute top-2.5 right-2.5">
               <svg className="w-4 h-4 text-[#0052ff]" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -195,7 +195,7 @@ export default function VoteUI({
             </div>
           )}
           <span className={`text-2xl font-bold leading-tight text-center line-clamp-2 ${
-            myChoice === 1 || selected === 1 ? "text-[#0052ff]" : "text-gray-900 dark:text-white"
+            (selected === null && myChoice === 1) || selected === 1 ? "text-[#0052ff]" : "text-gray-900 dark:text-white"
           }`}>
             {labelA}
           </span>
@@ -213,7 +213,7 @@ export default function VoteUI({
           onClick={() => handleSelect(2)}
           disabled={alreadyVoted || isVoting}
           className={`relative rounded-xl px-4 py-7 border-2 transition-all flex flex-col items-center justify-center gap-1
-            ${myChoice === 2
+            ${selected === null && myChoice === 2
               ? "border-red-500 bg-red-50 dark:bg-red-900/20 ring-1 ring-red-500/20"
               : selected === 2
               ? "border-red-500 bg-red-50/50 dark:bg-red-900/10"
@@ -222,7 +222,7 @@ export default function VoteUI({
               : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#161b22] hover:border-red-500 hover:bg-red-50/50 dark:hover:bg-red-900/10 cursor-pointer"
             }`}
         >
-          {(myChoice === 2 || selected === 2) && (
+          {(selected === null && myChoice === 2 || selected === 2) && (
             <div className="absolute top-2.5 right-2.5">
               <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -230,7 +230,7 @@ export default function VoteUI({
             </div>
           )}
           <span className={`text-2xl font-bold leading-tight text-center line-clamp-2 ${
-            myChoice === 2 || selected === 2 ? "text-red-500" : "text-gray-900 dark:text-white"
+            (selected === null && myChoice === 2) || selected === 2 ? "text-red-500" : "text-gray-900 dark:text-white"
           }`}>
             {labelB}
           </span>

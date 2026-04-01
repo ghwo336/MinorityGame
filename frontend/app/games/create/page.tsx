@@ -15,7 +15,7 @@ export default function CreateGamePage() {
   const [question, setQuestion] = useState("");
   const [optionA, setOptionA] = useState("");
   const [optionB, setOptionB] = useState("");
-  const [durationDays, setDurationDays] = useState(1);
+  const [durationSeconds, setDurationSeconds] = useState(86400);
   const [pendingGameId, setPendingGameId] = useState<number | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -86,18 +86,24 @@ export default function CreateGamePage() {
               Duration
             </label>
             <div className="flex gap-2 flex-wrap">
-              {[1, 2, 3, 5, 7].map((d) => (
+              {[
+                { label: "1m", seconds: 60 },
+                { label: "5m", seconds: 300 },
+                { label: "1d", seconds: 86400 },
+                { label: "3d", seconds: 259200 },
+                { label: "7d", seconds: 604800 },
+              ].map(({ label, seconds }) => (
                 <button
-                  key={d}
+                  key={seconds}
                   type="button"
-                  onClick={() => setDurationDays(d)}
+                  onClick={() => setDurationSeconds(seconds)}
                   className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                    durationDays === d
+                    durationSeconds === seconds
                       ? "border-[#0052ff] bg-blue-50 dark:bg-blue-900/20 text-[#0052ff]"
                       : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600"
                   }`}
                 >
-                  {d}d
+                  {label}
                 </button>
               ))}
             </div>
@@ -161,7 +167,13 @@ export default function CreateGamePage() {
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500 dark:text-gray-400">Duration</span>
-            <span className="font-medium text-gray-900 dark:text-white">{durationDays} day{durationDays > 1 ? "s" : ""}</span>
+            <span className="font-medium text-gray-900 dark:text-white">
+              {durationSeconds < 3600
+                ? `${durationSeconds / 60}m`
+                : durationSeconds < 86400
+                ? `${durationSeconds / 3600}h`
+                : `${durationSeconds / 86400}d`}
+            </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500 dark:text-gray-400">Entry fee (per player)</span>
@@ -186,7 +198,7 @@ export default function CreateGamePage() {
                 if (!optionA.trim()) return alert("Please enter a label for Option A.");
                 if (!optionB.trim()) return alert("Please enter a label for Option B.");
                 if (gameCount !== undefined) setPendingGameId(Number(gameCount));
-                create(question.trim(), optionA.trim(), optionB.trim(), durationDays);
+                create(question.trim(), optionA.trim(), optionB.trim(), durationSeconds);
               }}
               disabled={isPending || isConfirming}
               className="w-full py-3 text-sm font-semibold text-white bg-[#0052ff] hover:bg-[#0047e0] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
