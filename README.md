@@ -32,7 +32,10 @@ The **minority side wins**. If more people pick A, then B wins. If it's a tie, e
 
 ### Phase 1: Commit (게임 진행 중)
 
-플레이어가 투표할 때 실제 선택지를 숨긴 해시값만 온체인에 저장합니다.
+플레이어가 투표할 때:
+
+1. `choice + salt + 서명`을 **백엔드에 먼저 저장** (`confirmedOnChain = false`)
+2. 온체인에 commitment 해시만 제출
 
 ```
 commitment = keccak256(gameId + choice + salt + playerAddress)
@@ -42,17 +45,23 @@ commitment = keccak256(gameId + choice + salt + playerAddress)
 - `salt`: 클라이언트가 생성한 랜덤 32바이트 값
 - 해시만 온체인에 올라가므로 내용 추측 불가
 
-동시에 실제 `choice + salt + 서명`을 백엔드 서버에 전송합니다.
+백엔드를 먼저 저장하는 이유: 온체인 tx 확정 후 백엔드 저장에 실패하면 게임이 영구적으로 stuck 상태가 됩니다. 순서를 뒤집어 이를 방지합니다.
+
+### Pending 투표 정리
+
+백엔드 인덱서가 `VoteCommitted` 이벤트를 감지하면 해당 레코드를 `confirmedOnChain = true`로 변경하고 `commitCount`를 증가시킵니다.
+
+온체인 트랜잭션 없이 **1분이 지난** 미확인 레코드는 자동으로 삭제됩니다. 이를 통해 서명만 하고 tx를 의도적으로 보내지 않는 griefing 공격을 방지합니다.
 
 ### Phase 2: Reveal (게임 종료 후)
 
-게임 기간이 만료되면 백엔드의 resolver가 자동으로 `revealVotes()`를 호출합니다.
+게임 만료 후 **1분 grace period**가 지나면 백엔드 resolver가 자동으로 `revealVotes()`를 호출합니다. Grace period는 mempool에 대기 중인 트랜잭션이 인덱싱될 시간을 보장합니다.
 
 ```
 revealVotes(gameId, players[], choices[], salts[])
 ```
 
-컨트랙트가 각 플레이어의 `keccak256(gameId + choice + salt + address)`를 재계산하여 Phase 1의 해시와 일치하면 유효한 투표로 인정합니다. 모든 투표가 검증되면 소수 편을 계산하고 `Resolved` 이벤트를 emit합니다.
+`confirmedOnChain = true`인 커밋만 reveal 대상에 포함됩니다. 컨트랙트가 각 플레이어의 commitment를 검증하고, 소수 편을 계산하여 `Resolved` 이벤트를 emit합니다.
 
 ---
 
@@ -62,15 +71,18 @@ revealVotes(gameId, players[], choices[], salts[])
 1. Creator      → createGame(question, optionA, optionB, durationSeconds)
                   비용: 0.003 ETH
 
-2. Player       → commitVote(gameId, commitment)  [온체인]
-                  비용: 0.001 ETH
-                → POST /api/games/:id/commit      [오프체인]
+2. Player       → POST /api/games/:id/commit      [백엔드 먼저]
                   { choice, salt, signature }
+                → commitVote(gameId, commitment)  [온체인]
+                  비용: 0.001 ETH
 
-3. 게임 만료     → Resolver가 자동으로 revealVotes() 호출
-                  (백엔드 인덱서가 12초마다 폴링)
+3. 인덱서       → VoteCommitted 이벤트 감지 → confirmedOnChain = true
+                  (미확인 레코드는 1분 후 자동 삭제)
 
-4. Resolved     → 소수 편 플레이어들이 claimReward() 호출
+4. 게임 만료    → 만료 + 1분 후 Resolver가 자동으로 revealVotes() 호출
+                  또는 게임 상세 페이지에서 "Resolve Game" 버튼으로 수동 트리거
+
+5. Resolved     → 소수 편 플레이어들이 claimReward() 호출
                   동점 시 전원 환불 가능
 ```
 
@@ -97,22 +109,27 @@ MinorityGame/
 ├── test/MinorityGame.t.sol       # Foundry 테스트
 │
 ├── backend/
+│   ├── prisma/schema.prisma      # DB 스키마 (VoteCommit: confirmedOnChain, createdAt)
 │   └── src/
 │       ├── index.ts              # Express 서버 진입점
 │       ├── config.ts             # 환경변수 설정
 │       ├── indexer/
-│       │   ├── indexer.ts        # 블록 폴링 + Auto-resolver
+│       │   ├── indexer.ts        # 블록 폴링 + Auto-resolver (grace period 포함)
 │       │   └── abi.ts            # 컨트랙트 ABI
 │       ├── db/
-│       │   └── queries.ts        # Prisma DB 쿼리
+│       │   └── queries.ts        # Prisma DB 쿼리 (cleanupPendingVotes 포함)
 │       └── routes/
-│           ├── games.ts          # /api/games
+│           ├── games.ts          # /api/games (POST /:id/resolve 포함)
 │           └── players.ts        # /api/players
 │
 └── frontend/
+    ├── components/
+    │   ├── VoteUI.tsx            # 투표 UI (백엔드 먼저 저장)
+    │   ├── ClaimButton.tsx       # 보상 청구 버튼 (compact 모드 지원)
+    │   └── ResolveButton.tsx     # 수동 resolve 버튼
     └── app/
         ├── page.tsx              # Markets 목록
-        ├── games/[id]/page.tsx   # 게임 상세 + 투표
+        ├── games/[id]/page.tsx   # 게임 상세 + 투표 + Resolve 버튼
         ├── games/create/page.tsx # 게임 생성
         └── my/page.tsx           # Portfolio
 ```
@@ -130,6 +147,19 @@ MinorityGame/
 | `endEmptyGame(gameId)` | 참여자 없는 만료 게임 종료 | Anyone |
 | `emergencyRefund(gameId)` | 비상 환불 (만료 +3일 후) | 투표한 플레이어 |
 | `withdrawPendingFees()` | 게임 창작자 수수료 인출 | Creator |
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `GET` | `/api/games` | 게임 목록 (`?status=0\|1`, `?limit`, `?offset`) |
+| `GET` | `/api/games/:id` | 게임 상세 |
+| `POST` | `/api/games/:id/commit` | 투표 데이터 저장 (`{ player, choice, salt, signature }`) |
+| `POST` | `/api/games/:id/resolve` | 게임 수동 resolve 트리거 |
+| `GET` | `/api/games/:id/players/:address` | 플레이어 상태 조회 |
+| `GET` | `/api/players/:address/games` | 플레이어 참여 게임 목록 |
 
 ---
 
@@ -173,6 +203,9 @@ NEXT_PUBLIC_CONTRACT_ADDRESS=0x...
 ```bash
 # 전체 실행
 docker compose up -d
+
+# 재빌드 후 실행
+docker compose build --no-cache && docker compose up -d
 
 # 컨트랙트 배포
 source .env
