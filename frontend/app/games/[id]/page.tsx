@@ -63,9 +63,9 @@ export default function GameDetailPage({
   const estimatedReward = (() => {
     if (totalVotes === 0 || game.totalPool === 0n) return 0n;
     const winnerPool = (game.totalPool * 90n) / 100n;
-    const biggerSide = game.countA > game.countB ? game.countA : game.countB;
-    if (biggerSide === 0n) return 0n;
-    return winnerPool / biggerSide;
+    const smallerSide = game.countA < game.countB ? game.countA : game.countB;
+    if (smallerSide === 0n) return 0n;
+    return winnerPool / smallerSide;
   })();
 
   return (
@@ -129,11 +129,13 @@ export default function GameDetailPage({
           </div>
           <div className="p-4 text-center">
             <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">
-              {isActive ? "Time left" : "Est. reward"}
+              {isActive ? "Time left" : isResolved ? "Payout" : "Est. reward"}
             </div>
             <div className="text-base font-bold text-gray-900 dark:text-white">
               {isActive ? (
                 <CountdownTimer startTime={game.startTime} duration={game.duration} compact />
+              ) : isResolved ? (
+                totalVotes > 0 ? `${formatETH(game.payoutPerPlayer)} ETH` : "-"
               ) : totalVotes > 0 ? (
                 `${formatETH(estimatedReward)} ETH`
               ) : (
@@ -189,7 +191,7 @@ export default function GameDetailPage({
             <div className="text-xl font-bold text-amber-600 dark:text-amber-400">Draw - Refunds available</div>
           ) : (
             <div>
-              <span className={`inline-flex items-center justify-center w-12 h-12 rounded-full text-xl font-bold mb-2 ${
+              <span className={`inline-flex items-center justify-center rounded-full text-xl font-bold mb-2 px-5 py-2 ${
                 game.winningChoice === 1
                   ? "bg-blue-50 dark:bg-blue-900/30 text-[#0052ff]"
                   : "bg-red-50 dark:bg-red-900/30 text-red-500"
