@@ -7,6 +7,7 @@ import { formatETH, shortenAddress } from "@/lib/utils";
 import CountdownTimer from "@/components/CountdownTimer";
 import VoteUI from "@/components/VoteUI";
 import ClaimButton from "@/components/ClaimButton";
+import ResolveButton from "@/components/ResolveButton";
 import Link from "next/link";
 
 export default function GameDetailPage({
@@ -18,7 +19,7 @@ export default function GameDetailPage({
   const gameId = parseInt(id);
   const { address } = useAccount();
 
-  const { data: game, isLoading, error: gameError } = useGameDataApi(gameId);
+  const { data: game, isLoading, error: gameError, refetch } = useGameDataApi(gameId);
   const { data: playerStatus } = usePlayerStatusApi(gameId, address);
 
   const playerChoice = playerStatus?.choice ?? 0;
@@ -163,6 +164,13 @@ export default function GameDetailPage({
       {isNoParticipantEnded && (
         <div className="mb-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-center text-sm text-gray-500 dark:text-gray-400">
           No one participated in this game.
+        </div>
+      )}
+
+      {/* Resolve */}
+      {isActive && isExpired && !isNoParticipantEnded && (
+        <div className="mb-4">
+          <ResolveButton gameId={gameId} onResolved={() => setTimeout(() => refetch(), 3000)} />
         </div>
       )}
 

@@ -23,60 +23,66 @@ export function startIndexer(cfg: Config) {
 
   let isPolling = false;
 
-  async function autoRevealExpired() {
-    if (!walletClient) return;
+  async function resolveGame(gameId: number): Promise<{ ok: boolean; message: string }> {
+    if (!walletClient) return { ok: false, message: "Resolver not configured" };
 
-    const expiredIds = await queries.getExpiredActiveGames();
-    if (expiredIds.length === 0) return;
+    try {
+      const game = await queries.getGame(gameId);
+      if (!game) return { ok: false, message: "Game not found" };
+      if (game.status !== 0) return { ok: false, message: "Game already resolved" };
 
-    for (const gameId of expiredIds) {
-      try {
-        const game = await queries.getGame(gameId);
-        if (!game) continue;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const expiredAt = Number(game.startTime) + Number(game.duration);
+      if (expiredAt > nowSec) {
+        return { ok: false, message: "Game not yet expired" };
+      }
+      // 만료 후 1분 grace period: 아직 mempool에 있는 tx가 인덱싱될 시간
+      if (nowSec - expiredAt < 60) {
+        return { ok: false, message: "Grace period: waiting for pending transactions" };
+      }
 
-        // 참여자 없는 만료 게임 → 온체인 종료
-        if (game.commitCount === 0) {
-          const hash = await walletClient.writeContract({
-            address: cfg.contractAddress,
-            abi: MINORITY_GAME_ABI,
-            functionName: "endEmptyGame",
-            args: [BigInt(gameId)],
-          });
-          console.log(`Ended empty game ${gameId} (tx: ${hash})`);
-          continue;
-        }
-
-        const commits = await queries.getVoteCommitsForReveal(gameId);
-
-        // 백엔드에 데이터가 없는 커밋이 있으면 아직 reveal 불가
-        if (commits.length < game.commitCount) {
-          console.log(
-            `Game ${gameId}: ${game.commitCount - commits.length} commits missing vote data, skipping reveal`
-          );
-          continue;
-        }
-
-        const players = commits.map((c) => c.player as `0x${string}`);
-        const choices = commits.map((c) => c.choice as 1 | 2);
-        const salts = commits.map((c) => c.salt as `0x${string}`);
-
+      if (game.commitCount === 0) {
         const hash = await walletClient.writeContract({
           address: cfg.contractAddress,
           abi: MINORITY_GAME_ABI,
-          functionName: "revealVotes",
-          args: [BigInt(gameId), players, choices, salts],
+          functionName: "endEmptyGame",
+          args: [BigInt(gameId)],
         });
-
-        console.log(`Auto-revealed game ${gameId} (${commits.length} votes, tx: ${hash})`);
-        await queries.markCommitsRevealed(gameId);
-      } catch (err: any) {
-        const msg = err?.message || "";
-        if (msg.includes("not active") || msg.includes("not expired")) {
-          // skip silently
-        } else {
-          console.error(`Failed to auto-reveal game ${gameId}:`, msg.slice(0, 120));
-        }
+        console.log(`Ended empty game ${gameId} (tx: ${hash})`);
+        return { ok: true, message: `Ended empty game (tx: ${hash})` };
       }
+
+      const commits = await queries.getVoteCommitsForReveal(gameId);
+      if (commits.length < game.commitCount) {
+        return { ok: false, message: `Missing vote data: ${game.commitCount - commits.length} commits pending` };
+      }
+
+      const players = commits.map((c) => c.player as `0x${string}`);
+      const choices = commits.map((c) => c.choice as 1 | 2);
+      const salts = commits.map((c) => c.salt as `0x${string}`);
+
+      const hash = await walletClient.writeContract({
+        address: cfg.contractAddress,
+        abi: MINORITY_GAME_ABI,
+        functionName: "revealVotes",
+        args: [BigInt(gameId), players, choices, salts],
+      });
+
+      console.log(`Revealed game ${gameId} (${commits.length} votes, tx: ${hash})`);
+      await queries.markCommitsRevealed(gameId);
+      return { ok: true, message: `Revealed ${commits.length} votes (tx: ${hash})` };
+    } catch (err: any) {
+      const msg = err?.message || "Unknown error";
+      console.error(`Failed to resolve game ${gameId}:`, msg.slice(0, 120));
+      return { ok: false, message: msg.slice(0, 120) };
+    }
+  }
+
+  async function autoRevealExpired() {
+    await queries.cleanupPendingVotes();
+    const expiredIds = await queries.getExpiredActiveGames();
+    for (const gameId of expiredIds) {
+      await resolveGame(gameId);
     }
   }
 
@@ -226,4 +232,6 @@ export function startIndexer(cfg: Config) {
   if (walletClient) {
     console.log(`Auto-resolver enabled (${walletClient.account.address})`);
   }
+
+  return { resolveGame };
 }

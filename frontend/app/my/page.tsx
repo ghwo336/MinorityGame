@@ -211,8 +211,8 @@ function MyGameRow({
 
         <div className="text-right">
           {canClaim ? (
-            <div className="w-32 ml-auto">
-              <ClaimButton gameId={gameId} amount={claimableAmount} />
+            <div className="w-28 ml-auto">
+              <ClaimButton gameId={gameId} amount={claimableAmount} compact />
             </div>
           ) : canEmergencyRefund ? (
             <EmergencyRefundButton gameId={gameId} />

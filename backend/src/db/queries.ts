@@ -93,19 +93,36 @@ export async function insertVoteCommit(data: {
   player: string;
   commitmentHash: string;
 }): Promise<void> {
-  // Idempotent: only increment commitCount if this is a NEW commit (prevents double-counting on re-index)
   const existing = await prisma.voteCommit.findUnique({
     where: { gameId_player: { gameId: data.gameId, player: data.player } },
-    select: { player: true },
+    select: { confirmedOnChain: true },
   });
-  if (existing) return;
 
+  if (existing) {
+    // storeVoteData가 먼저 만든 레코드 → 온체인 확인 완료로 표시 + commitCount 증가
+    if (!existing.confirmedOnChain) {
+      await prisma.$transaction([
+        prisma.voteCommit.update({
+          where: { gameId_player: { gameId: data.gameId, player: data.player } },
+          data: { confirmedOnChain: true, commitmentHash: data.commitmentHash },
+        }),
+        prisma.game.update({
+          where: { gameId: data.gameId },
+          data: { commitCount: { increment: 1 } },
+        }),
+      ]);
+    }
+    return;
+  }
+
+  // 인덱서가 먼저 처리: 바로 confirmed 상태로 생성
   await prisma.$transaction([
     prisma.voteCommit.create({
       data: {
         gameId: data.gameId,
         player: data.player,
         commitmentHash: data.commitmentHash,
+        confirmedOnChain: true,
       },
     }),
     prisma.game.update({
@@ -178,22 +195,17 @@ export async function storeVoteData(data: {
     });
   } else {
     // 인덱서가 아직 VoteCommitted 이벤트를 처리하지 않은 경우 (레이스 컨디션)
-    // commitment hash와 함께 미리 저장 + commitCount 증가 (insertVoteCommit이 나중에 스킵하므로)
-    await prisma.$transaction([
-      prisma.voteCommit.create({
-        data: {
-          gameId: data.gameId,
-          player: data.player,
-          commitmentHash: computed,
-          choice: data.choice,
-          salt: data.salt,
-        },
-      }),
-      prisma.game.update({
-        where: { gameId: data.gameId },
-        data: { commitCount: { increment: 1 } },
-      }),
-    ]);
+    // confirmedOnChain = false로 저장, commitCount는 인덱서 이벤트 도착 시 증가
+    await prisma.voteCommit.create({
+      data: {
+        gameId: data.gameId,
+        player: data.player,
+        commitmentHash: computed,
+        choice: data.choice,
+        salt: data.salt,
+        confirmedOnChain: false,
+      },
+    });
   }
 
   return { ok: true };
@@ -205,13 +217,19 @@ export async function getVoteCommitsForReveal(gameId: number): Promise<{
   salt: string;
 }[]> {
   const commits = await prisma.voteCommit.findMany({
-    where: { gameId, revealed: false },
+    where: { gameId, revealed: false, confirmedOnChain: true },
   });
 
-  // choice/salt가 없는 커밋은 reveal 불가 (유저가 백엔드에 데이터 미전송)
   return commits
     .filter((c) => c.choice !== null && c.salt !== null)
     .map((c) => ({ player: c.player, choice: c.choice!, salt: c.salt! }));
+}
+
+export async function cleanupPendingVotes(): Promise<void> {
+  const cutoff = new Date(Date.now() - 60_000); // 1분 지난 미확인 레코드 삭제
+  await prisma.voteCommit.deleteMany({
+    where: { confirmedOnChain: false, createdAt: { lt: cutoff } },
+  });
 }
 
 export async function markCommitsRevealed(gameId: number): Promise<void> {

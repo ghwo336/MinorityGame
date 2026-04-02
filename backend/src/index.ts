@@ -12,13 +12,13 @@ async function main() {
   await prisma.$connect();
   console.log("Database connected");
 
-  startIndexer(config);
+  const { resolveGame } = startIndexer(config);
 
   const app = express();
   app.use(cors({ origin: config.corsOrigin }));
   app.use(express.json());
 
-  app.use("/api/games", gamesRouter());
+  app.use("/api/games", gamesRouter(resolveGame));
   app.use("/api/players", playersRouter());
   app.use("/api/health", healthRouter());
 

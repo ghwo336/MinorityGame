@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { keccak256, encodePacked } from "viem";
 import { useSignMessage } from "wagmi";
 import { useRouter } from "next/navigation";
@@ -42,7 +42,6 @@ export default function VoteUI({
   const [showSuccess, setShowSuccess] = useState(false);
   const { commit, isPending, isConfirming, isSuccess } = useCommitVote();
   const { signMessageAsync, isPending: isSignPending } = useSignMessage();
-  const pendingSigRef = useRef<`0x${string}` | null>(null);
   useRefetchAfterTx(isSuccess);
 
   // localStorage에서 이전 투표 복원 (지갑별로 분리)
@@ -53,26 +52,12 @@ export default function VoteUI({
     if (saved === "1" || saved === "2") setLocalChoice(Number(saved) as 1 | 2);
   }, [gameId, address]);
 
-  // tx 성공 후 백엔드에 choice+salt+signature 전송
+  // tx 성공 후 UI 업데이트 (백엔드 저장은 이미 서명 직후 완료됨)
   useEffect(() => {
     if (!isSuccess || !address || !selected) return;
-
-    const salt = localStorage.getItem(SALT_KEY(gameId, address));
-    const sig = pendingSigRef.current;
-    if (!salt || !sig) return;
-
-    submitVoteData(gameId, address, selected, salt, sig)
-      .then(() => {
-        localStorage.setItem(CHOICE_KEY(gameId, address), String(selected));
-        setLocalChoice(selected);
-        setShowSuccess(true);
-      })
-      .catch((err) => {
-        console.error("Failed to store vote data:", err);
-        localStorage.setItem(CHOICE_KEY(gameId, address), String(selected));
-        setLocalChoice(selected);
-        setShowSuccess(true);
-      });
+    localStorage.setItem(CHOICE_KEY(gameId, address), String(selected));
+    setLocalChoice(selected);
+    setShowSuccess(true);
   }, [isSuccess]);
 
   const isVoting = isSignPending || isPending || isConfirming;
@@ -113,13 +98,15 @@ export default function VoteUI({
       const sig = await signMessageAsync({
         message: `minority-commit:${gameId}:${commitment}`,
       });
-      pendingSigRef.current = sig;
 
-      // 2) 온체인 commitment 제출
+      // 2) 백엔드에 choice+salt+signature 저장 (온체인 tx 전에 먼저)
+      await submitVoteData(gameId, address, selected, salt, sig);
+
+      // 3) 온체인 commitment 제출
       commit(gameId, commitment);
-    } catch {
+    } catch (err) {
       localStorage.removeItem(SALT_KEY(gameId, address));
-      pendingSigRef.current = null;
+      console.error("Vote failed:", err);
     }
   }
 

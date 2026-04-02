@@ -1,7 +1,9 @@
 import { Router } from "express";
 import * as queries from "../db/queries.js";
 
-export function gamesRouter(): Router {
+export function gamesRouter(
+  resolveGame?: (gameId: number) => Promise<{ ok: boolean; message: string }>
+): Router {
   const router = Router();
 
   // GET /api/games/count
@@ -88,6 +90,30 @@ export function gamesRouter(): Router {
       res.json({ ok: true });
     } catch (err) {
       console.error(`POST /api/games/${req.params.id}/commit error:`, err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/games/:id/resolve
+  router.post("/:id/resolve", async (req, res) => {
+    if (!resolveGame) {
+      res.status(503).json({ error: "Resolver not configured" });
+      return;
+    }
+    const gameId = parseInt(req.params.id);
+    if (isNaN(gameId)) {
+      res.status(400).json({ error: "Invalid game ID" });
+      return;
+    }
+    try {
+      const result = await resolveGame(gameId);
+      if (!result.ok) {
+        res.status(400).json({ error: result.message });
+        return;
+      }
+      res.json({ ok: true, message: result.message });
+    } catch (err) {
+      console.error(`POST /api/games/${req.params.id}/resolve error:`, err);
       res.status(500).json({ error: "Internal server error" });
     }
   });

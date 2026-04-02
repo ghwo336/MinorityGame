@@ -16,6 +16,7 @@ export default function Header() {
   ];
 
   return (
+    <>
     <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#161b22]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 h-14">
         {/* Logo */}
@@ -24,7 +25,7 @@ export default function Header() {
             Minority Market
           </Link>
 
-          {/* Nav */}
+          {/* Nav - desktop only */}
           <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => (
               <Link
@@ -112,5 +113,43 @@ export default function Header() {
         </div>
       </div>
     </header>
+
+    {/* Bottom nav - mobile only */}
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#161b22] border-t border-gray-200 dark:border-gray-800">
+      <div className="flex">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex-1 flex flex-col items-center justify-center py-3 text-xs font-medium transition-colors ${
+                isActive
+                  ? "text-[#0052ff]"
+                  : "text-gray-400 dark:text-gray-500"
+              }`}
+            >
+              {item.href === "/" && (
+                <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+              )}
+              {item.href === "/games/create" && (
+                <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              )}
+              {item.href === "/my" && (
+                <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              )}
+              {item.label}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+    </>
   );
 }

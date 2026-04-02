@@ -41,16 +41,19 @@ model Game {
 }
 
 model VoteCommit {
-  gameId         Int     @map("game_id")
-  player         String
-  commitmentHash String  @map("commitment_hash")
-  choice         Int?    @db.SmallInt
-  salt           String?
-  revealed       Boolean @default(false)
-  game           Game    @relation(fields: [gameId], references: [gameId])
+  gameId           Int      @map("game_id")
+  player           String
+  commitmentHash   String   @map("commitment_hash")
+  choice           Int?     @db.SmallInt
+  salt             String?
+  revealed         Boolean  @default(false)
+  confirmedOnChain Boolean  @default(false) @map("confirmed_on_chain")
+  createdAt        DateTime @default(now()) @map("created_at")
+  game             Game     @relation(fields: [gameId], references: [gameId])
 
   @@id([gameId, player])
   @@index([gameId, revealed])
+  @@index([confirmedOnChain, createdAt])
   @@map("vote_commits")
 }
 

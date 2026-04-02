@@ -123,6 +123,16 @@ export async function submitVoteData(
   }
 }
 
+export async function resolveGame(gameId: number): Promise<{ ok: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/games/${gameId}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `API error ${res.status}`);
+  return data;
+}
+
 export async function getPlayerGames(address: string, opts?: { limit?: number; offset?: number }) {
   const params = new URLSearchParams();
   if (opts?.limit) params.set("limit", String(opts.limit));
